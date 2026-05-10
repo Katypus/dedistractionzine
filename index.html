@@ -145,6 +145,8 @@
         <button id="zoomOut" type="button">-</button>
         <button id="zoomReset" type="button">Fit</button>
         <button id="zoomIn" type="button">+</button>
+        <button id="savePdf" type="button">Save</button>
+        <button id="printPdf" type="button">Print</button>
         <span class="status" id="status">Loading...</span>
       </div>
     </header>
@@ -250,6 +252,45 @@
         }
       }
 
+      function savePdf() {
+        const link = document.createElement("a");
+        link.href = pdfUrl;
+        link.download = "actualzinezine_compressed-1.pdf";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      function printPdf() {
+        const printFrame = document.createElement("iframe");
+        printFrame.style.position = "fixed";
+        printFrame.style.width = "0";
+        printFrame.style.height = "0";
+        printFrame.style.border = "0";
+        printFrame.style.right = "0";
+        printFrame.style.bottom = "0";
+        printFrame.src = pdfUrl;
+
+        printFrame.onload = () => {
+          const printWindow = printFrame.contentWindow;
+          if (!printWindow) {
+            setMessage(
+              "Print failed. Try Save and print from your PDF app.",
+              true,
+            );
+            return;
+          }
+
+          printWindow.focus();
+          printWindow.print();
+        };
+
+        document.body.appendChild(printFrame);
+        window.setTimeout(() => {
+          printFrame.remove();
+        }, 60000);
+      }
+
       document.getElementById("zoomIn").addEventListener("click", () => {
         updateZoom(1.15);
       });
@@ -264,6 +305,9 @@
           renderAllPages();
         }
       });
+
+      document.getElementById("savePdf").addEventListener("click", savePdf);
+      document.getElementById("printPdf").addEventListener("click", printPdf);
 
       let resizeTimeout;
       window.addEventListener("resize", () => {
