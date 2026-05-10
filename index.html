@@ -1,20 +1,281 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pdf</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zine Viewer</title>
     <style>
-        html, body {margin: 0; padding: 0; height: 100%;}
+      :root {
+        --bg: #0f0f12;
+        --panel: #1a1b20;
+        --text: #f5f5f7;
+        --muted: #acafb8;
+        --border: #2f3240;
+        --accent: #ffb84d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at top, #242837, var(--bg) 45%);
+        color: var(--text);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.65rem 0.85rem;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, var(--panel) 88%, black);
+      }
+
+      .title {
+        font-size: 0.95rem;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      button {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: #242835;
+        color: var(--text);
+        padding: 0.35rem 0.7rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 0.85rem;
+        min-width: 9ch;
+        text-align: right;
+      }
+
+      .viewer {
+        flex: 1;
+        overflow: auto;
+        padding: 1rem 0.75rem 1.5rem;
+      }
+
+      .pages {
+        width: min(100%, 1100px);
+        margin: 0 auto;
+        display: grid;
+        gap: 1rem;
+      }
+
+      .page {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #222634;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+      }
+
+      .page canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .message {
+        width: min(100%, 60ch);
+        margin: 2rem auto;
+        text-align: center;
+        color: var(--muted);
+        padding: 0 1rem;
+      }
+
+      .message.error {
+        color: #ff7f7f;
+      }
+
+      @media (max-width: 640px) {
+        .toolbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .controls {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .status {
+          text-align: left;
+        }
+      }
     </style>
-</head>
-<body>
-    <iframe 
-  src="actualzinezine_compressed-1.pdf" 
-  width="100%" 
-  height="80vh" 
-  style="border: none;"
->
-</iframe> 
-</body>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="title">dedistractionzine</div>
+      <div class="controls">
+        <button id="zoomOut" type="button">-</button>
+        <button id="zoomReset" type="button">Fit</button>
+        <button id="zoomIn" type="button">+</button>
+        <span class="status" id="status">Loading...</span>
+      </div>
+    </header>
+
+    <main class="viewer">
+      <div class="pages" id="pages"></div>
+      <p class="message" id="message">Loading PDF...</p>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      const pdfUrl = "actualzinezine_compressed-1.pdf";
+      const pagesEl = document.getElementById("pages");
+      const messageEl = document.getElementById("message");
+      const statusEl = document.getElementById("status");
+
+      let pdfDoc = null;
+      let zoomLevel = 1;
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+      function setMessage(text, isError = false) {
+        messageEl.textContent = text;
+        messageEl.classList.toggle("error", isError);
+        messageEl.hidden = false;
+      }
+
+      function clearMessage() {
+        messageEl.hidden = true;
+      }
+
+      async function renderPage(pageNumber) {
+        const page = await pdfDoc.getPage(pageNumber);
+        const pageWrapper = document.createElement("div");
+        pageWrapper.className = "page";
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        pageWrapper.appendChild(canvas);
+        pagesEl.appendChild(pageWrapper);
+
+        const containerWidth = pagesEl.clientWidth;
+        const initialViewport = page.getViewport({ scale: 1 });
+        const fitScale = containerWidth / initialViewport.width;
+        const viewport = page.getViewport({ scale: fitScale * zoomLevel });
+
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+        const renderContext = {
+          canvasContext: context,
+          viewport,
+          transform: dpr === 1 ? null : [dpr, 0, 0, dpr, 0, 0],
+        };
+
+        await page.render(renderContext).promise;
+      }
+
+      async function renderAllPages() {
+        if (!pdfDoc) {
+          return;
+        }
+
+        statusEl.textContent = "Rendering...";
+        pagesEl.innerHTML = "";
+
+        for (
+          let pageNumber = 1;
+          pageNumber <= pdfDoc.numPages;
+          pageNumber += 1
+        ) {
+          await renderPage(pageNumber);
+          statusEl.textContent = `Page ${pageNumber}/${pdfDoc.numPages}`;
+        }
+
+        clearMessage();
+      }
+
+      async function loadPdf() {
+        try {
+          setMessage("Loading PDF...");
+          const loadingTask = pdfjsLib.getDocument(pdfUrl);
+          pdfDoc = await loadingTask.promise;
+          await renderAllPages();
+        } catch (error) {
+          console.error(error);
+          statusEl.textContent = "Load failed";
+          setMessage(
+            "Could not load PDF. Check that the PDF file path is correct and this page is served over http(s).",
+            true,
+          );
+        }
+      }
+
+      function updateZoom(multiplier) {
+        zoomLevel = Math.min(2.5, Math.max(0.5, zoomLevel * multiplier));
+        if (pdfDoc) {
+          renderAllPages();
+        }
+      }
+
+      document.getElementById("zoomIn").addEventListener("click", () => {
+        updateZoom(1.15);
+      });
+
+      document.getElementById("zoomOut").addEventListener("click", () => {
+        updateZoom(1 / 1.15);
+      });
+
+      document.getElementById("zoomReset").addEventListener("click", () => {
+        zoomLevel = 1;
+        if (pdfDoc) {
+          renderAllPages();
+        }
+      });
+
+      let resizeTimeout;
+      window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimeout);
+        resizeTimeout = window.setTimeout(() => {
+          if (pdfDoc) {
+            renderAllPages();
+          }
+        }, 150);
+      });
+
+      loadPdf();
+    </script>
+  </body>
 </html>
